@@ -1,60 +1,49 @@
 import express from "express";
 import cors from "cors";
 import multer from "multer";
-import { PDFDocument } from "pdf-lib";
 
 const app = express();
 
-app.use(cors({ origin: true }));
+// CORS liberado (ajuste depois se quiser restringir ao domínio do Cotiza)
+app.use(cors());
+app.use(express.json({ limit: "25mb" }));
 
-app.get("/health", (req, res) => {
-  res.json({ ok: true });
-});
-
+// Upload (até 20MB)
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB
+  limits: { fileSize: 20 * 1024 * 1024 },
 });
 
+// Healthcheck
+app.get("/health", (req, res) => {
+  return res.json({ ok: true });
+});
+
+// Rota OCR (o Cotiza está chamando POST /ocr)
 app.post("/ocr", upload.single("file"), async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ error: "Missing file" });
+      return res.status(400).json({ error: "Falta el archivo (field: file)." });
     }
 
-    const pdfDoc = await PDFDocument.create();
-    const bytes = req.file.buffer;
-
-    let image;
-    if (req.file.mimetype.includes("png")) {
-      image = await pdfDoc.embedPng(bytes);
-    } else {
-      image = await pdfDoc.embedJpg(bytes);
-    }
-
-    const page = pdfDoc.addPage();
-    const { width, height } = page.getSize();
-
-    const dims = image.scale(1);
-    const scale = Math.min(width / dims.width, height / dims.height);
-
-    page.drawImage(image, {
-      x: (width - dims.width * scale) / 2,
-      y: (height - dims.height * scale) / 2,
-      width: dims.width * scale,
-      height: dims.height * scale,
+    // Aqui você liga o OCR de verdade (Google Vision / Tesseract etc.)
+    // Por enquanto devolvo um mock pra garantir que a rota existe e não dá 404.
+    // Troca esta parte pelo OCR real.
+    return res.json({
+      ok: true,
+      mode: req.body?.mode || "B",
+      filename: req.file.originalname,
+      size: req.file.size,
+      text: "OCR OK (placeholder). Conecta aquí el motor real.",
     });
-
-    const pdfBytes = await pdfDoc.save();
-
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", 'attachment; filename="cotizafacil.pdf"');
-    res.send(Buffer.from(pdfBytes));
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error", details: err.message });
+    console.error("OCR error:", err);
+    return res.status(500).json({ error: "Error interno en OCR." });
   }
 });
 
-const port = process.env.PORT || 8080;
-app.listen(port, () => console.log("Running on port", port));
+// Importante: Railway usa PORT dinâmica
+const PORT = process.env.PORT || 8080;
+app.listen(PORT, () => {
+  console.log(`OCR server running on port ${PORT}`);
+});
